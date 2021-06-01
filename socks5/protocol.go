@@ -18,10 +18,10 @@ const (
 type METHOD = uint8
 
 const (
-	noAuth              METHOD = 0x00
-	authGSSAPI          METHOD = 0x01
-	authPassword        METHOD = 0x02
-	authNoMatchedMethod METHOD = 0xff
+	NoAuth              METHOD = 0x00
+	AuthGSSAPI          METHOD = 0x01
+	AuthPassword        METHOD = 0x02
+	AuthNoMatchedMethod METHOD = 0xff
 )
 
 // CMD indicate client request type
@@ -197,12 +197,83 @@ func NewReply(ver VER) *Reply {
 	}
 }
 
-// SerializeReply
+// SerializeReply serialize reply to []byte
 func SerializeReply(reply Reply) ([]byte, error) {
-	return nil, nil
+	var content bytes.Buffer
+	var err error
+	err = content.WriteByte(reply.VER)
+	if err != nil {
+		return nil, err
+	}
+	err = content.WriteByte(reply.REP)
+	if err != nil {
+		return nil, err
+	}
+	err = content.WriteByte(reply.RSV)
+	if err != nil {
+		return nil, err
+	}
+	err = content.WriteByte(reply.ATYP)
+	if err != nil {
+		return nil, err
+	}
+	_, err = content.Write(reply.BNDAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	port := make([]byte, 2)
+	binary.BigEndian.PutUint16(port, reply.BNDPort)
+	_, err = content.Write(port)
+	if err != nil {
+		return nil, err
+	}
+	return content.Bytes(), nil
 }
 
-// DeserializeReply
+// DeserializeReply deserialize content to a reply
 func DeserializeReply(content []byte) (*Reply, error) {
-	return nil, nil
+	contentLen := len(content)
+	if content == nil {
+		return nil, errors.New("nil buffer")
+	}
+
+	if contentLen < 4 {
+		return nil, errors.New("request is too short")
+	}
+
+	reply := new(Reply)
+	reply.VER = content[0]
+	reply.REP = content[1]
+	reply.RSV = content[2]
+	reply.ATYP = content[3]
+
+	switch reply.ATYP {
+	case IPV4:
+		if contentLen != 6+net.IPv4len {
+			return nil, ErrReqLength
+		}
+		reply.BNDAddr = content[4:8]
+		reply.BNDPort = binary.BigEndian.Uint16(content[8:])
+	case IPV6:
+		if contentLen != 6+net.IPv6len {
+			return nil, ErrReqLength
+		}
+		reply.BNDAddr = content[4:20]
+		reply.BNDPort = binary.BigEndian.Uint16(content[20:])
+	case DOMAINNAME:
+		addressLen := int(content[4]) + 6 + 1
+		if contentLen != addressLen {
+			return nil, ErrReqLength
+		}
+		ipAddr, err := net.ResolveIPAddr("ip", string(content[4:addressLen]))
+		if err != nil {
+			return nil, err
+		}
+		reply.BNDAddr = ipAddr.IP
+		reply.BNDPort = binary.BigEndian.Uint16(content[addressLen:])
+	default:
+		return nil, errors.New("unknown address type")
+	}
+	return reply, nil
 }

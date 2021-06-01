@@ -3,14 +3,12 @@ package socks5
 import (
 	"log"
 	"net"
-	"strconv"
 )
 
-// Server is a socks server
+// Server is a socks5 server
 type Server struct {
-	Addr net.IP
-	Port uint16
-	Ln   net.Listener
+	Addr string
+	ln   net.Listener
 }
 
 // Listen on server's address & port
@@ -19,8 +17,7 @@ func (s *Server) Listen() error {
 		err error
 	)
 
-	laddr := net.JoinHostPort(s.Addr.String(), strconv.Itoa(int(s.Port)))
-	s.Ln, err = net.Listen("tcp", laddr)
+	s.ln, err = net.Listen("tcp", s.Addr)
 	if err != nil {
 		return err
 	}
@@ -29,7 +26,7 @@ func (s *Server) Listen() error {
 
 func (s *Server) Accept() {
 	for {
-		conn, err := s.Ln.Accept()
+		conn, err := s.ln.Accept()
 		if err != nil {
 			log.Fatal(err)
 		}
